@@ -1,4 +1,4 @@
--- // Stream Sniper with Orange UI + Draggable
+-- // Stream Sniper with Orange UI + Serverhop
 -- // By ChatGPT
 
 -- Services
@@ -14,7 +14,7 @@ ScreenGui.ResetOnSpawn = false
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 300, 0, 220)
 MainFrame.Position = UDim2.new(0.35, 0, 0.35, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(255, 140, 0) -- orange
+MainFrame.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
 MainFrame.Active = true
 MainFrame.Draggable = true
 
@@ -94,6 +94,15 @@ local function getUserIdFromUsername(name)
    return data.data[1] and data.data[1].id or nil
 end
 
+local function getServerList(placeId, cursor)
+   local url = "https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder=Asc&limit=100"
+   if cursor and cursor ~= "" then
+      url = url .. "&cursor=" .. cursor
+   end
+   local response = game:HttpGet(url)
+   return HttpService:JSONDecode(response)
+end
+
 -- Start Button Action
 StartButton.MouseButton1Click:Connect(function()
    if searching then
@@ -119,34 +128,35 @@ StartButton.MouseButton1Click:Connect(function()
    searching = true
    task.spawn(function()
       local cursor = ""
-      local success = false
+      local hopped = false
 
-      for i = 1, 100 do
-         if not searching then break end -- if stopped
-         local url = "https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder=Asc&limit=100"..(cursor ~= "" and "&cursor="..cursor or "")
-         local response = game:HttpGet(url)
-         local data = HttpService:JSONDecode(response)
-
-         for _,server in pairs(data.data) do
-            for _,pid in pairs(server.playerIds) do
-               if pid == userId then
-                  Notify("Target found! Joining...")
-                  TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
-                  success = true
-                  searching = false
-                  break
+      while searching do
+         local data = getServerList(placeId, cursor)
+         for _, server in ipairs(data.data) do
+            -- if server not full
+            if server.playing < server.maxPlayers then
+               for _, pid in pairs(server.playerIds) do
+                  if pid == userId then
+                     Notify("Target found! Joining...")
+                     TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
+                     searching = false
+                     return
+                  end
                end
+               -- hop to this server anyway
+               Notify("Hopping server...")
+               TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
+               hopped = true
+               searching = false
+               return
             end
-            if success or not searching then break end
          end
-
-         if success or not searching then break end
          cursor = data.nextPageCursor or ""
          if cursor == "" then break end
       end
 
-      if not success and searching then
-         Notify("Target not found in 100 servers!")
+      if not hopped then
+         Notify("No servers to hop, try again!")
          searching = false
       end
    end)
