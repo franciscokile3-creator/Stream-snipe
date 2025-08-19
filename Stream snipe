@@ -1,147 +1,111 @@
---// Orange Snipe GUI with ServerHop
--- Services
+--// Orange Snipe GUI //--
+
 local Players = game:GetService("Players")
 local Http = game:GetService("HttpService")
-local TPS = game:GetService("TeleportService")
-
+local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
-local placeId = game.PlaceId
+local Api = "https://games.roblox.com/v1/games/"
+local PlaceId = game.PlaceId
 
--- Vars
-local stopSearch = false
-local maxServers = 100
-
--- UI
+-- UI LIB (simple orange draggable)
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 300, 0, 200)
+local UICorner = Instance.new("UICorner", Frame)
+local Title = Instance.new("TextLabel", Frame)
+local TextBox = Instance.new("TextBox", Frame)
+local Button = Instance.new("TextButton", Frame)
+local Status = Instance.new("TextLabel", Frame)
+
+Frame.Size = UDim2.new(0, 250, 0, 150)
 Frame.Position = UDim2.new(0.35, 0, 0.35, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(255, 140, 0) -- orange
+Frame.BackgroundColor3 = Color3.fromRGB(255,140,0) -- orange
 Frame.Active = true
 Frame.Draggable = true
-Frame.Name = "SnipeGUI"
 
-local UICorner = Instance.new("UICorner", Frame)
-UICorner.CornerRadius = UDim.new(0, 12)
+UICorner.CornerRadius = UDim.new(0, 10)
 
--- Title
-local Title = Instance.new("TextLabel", Frame)
+Title.Text = "🎯 Snipe Tool"
 Title.Size = UDim2.new(1, 0, 0, 30)
 Title.BackgroundTransparency = 1
-Title.Text = "🔫 Stream Snipe GUI"
 Title.TextColor3 = Color3.new(1,1,1)
 Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 20
+Title.TextSize = 18
 
--- PlaceId Box
-local PlaceBox = Instance.new("TextBox", Frame)
-PlaceBox.PlaceholderText = "Enter PlaceId (default = current)"
-PlaceBox.Size = UDim2.new(1, -20, 0, 25)
-PlaceBox.Position = UDim2.new(0, 10, 0, 40)
-PlaceBox.BackgroundColor3 = Color3.fromRGB(255, 200, 120)
-PlaceBox.Text = tostring(placeId)
+TextBox.PlaceholderText = "Enter Username..."
+TextBox.Size = UDim2.new(0.9, 0, 0, 30)
+TextBox.Position = UDim2.new(0.05,0,0.3,0)
+TextBox.BackgroundColor3 = Color3.fromRGB(255, 170, 50)
+TextBox.TextColor3 = Color3.new(1,1,1)
+TextBox.Font = Enum.Font.SourceSans
+TextBox.TextSize = 16
 
--- Username Box
-local UserBox = Instance.new("TextBox", Frame)
-UserBox.PlaceholderText = "Target Username"
-UserBox.Size = UDim2.new(1, -20, 0, 25)
-UserBox.Position = UDim2.new(0, 10, 0, 70)
-UserBox.BackgroundColor3 = Color3.fromRGB(255, 200, 120)
-UserBox.Text = ""
+Button.Text = "🔍 Start Snipe"
+Button.Size = UDim2.new(0.9, 0, 0, 30)
+Button.Position = UDim2.new(0.05,0,0.55,0)
+Button.BackgroundColor3 = Color3.fromRGB(200,100,0)
+Button.TextColor3 = Color3.new(1,1,1)
+Button.Font = Enum.Font.SourceSansBold
+Button.TextSize = 16
 
--- Status Label
-local Status = Instance.new("TextLabel", Frame)
-Status.Size = UDim2.new(1, -20, 0, 25)
-Status.Position = UDim2.new(0, 10, 0, 100)
-Status.BackgroundTransparency = 1
 Status.Text = "Status: Idle"
+Status.Size = UDim2.new(1, 0, 0, 20)
+Status.Position = UDim2.new(0,0,0.85,0)
+Status.BackgroundTransparency = 1
 Status.TextColor3 = Color3.new(1,1,1)
-Status.TextSize = 18
-Status.Font = Enum.Font.SourceSansBold
-Status.TextWrapped = true
+Status.Font = Enum.Font.SourceSans
+Status.TextSize = 14
 
--- Start Button
-local StartBtn = Instance.new("TextButton", Frame)
-StartBtn.Size = UDim2.new(0.45, -15, 0, 30)
-StartBtn.Position = UDim2.new(0, 10, 0, 140)
-StartBtn.Text = "Start Snipe"
-StartBtn.BackgroundColor3 = Color3.fromRGB(255, 180, 60)
-StartBtn.TextColor3 = Color3.new(1,1,1)
-StartBtn.Font = Enum.Font.SourceSansBold
-StartBtn.TextSize = 18
-
-local StopBtn = Instance.new("TextButton", Frame)
-StopBtn.Size = UDim2.new(0.45, -15, 0, 30)
-StopBtn.Position = UDim2.new(0.55, 5, 0, 140)
-StopBtn.Text = "Stop"
-StopBtn.BackgroundColor3 = Color3.fromRGB(200, 80, 60)
-StopBtn.TextColor3 = Color3.new(1,1,1)
-StopBtn.Font = Enum.Font.SourceSansBold
-StopBtn.TextSize = 18
-
--- Server API
-local function ListServers(place, cursor)
-    local url = ("https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=100"):format(place)
-    if cursor then
-        url = url .. "&cursor=" .. cursor
-    end
-    local response = Http:JSONDecode(game:HttpGet(url))
-    return response
+-- Function to scan servers
+local function ListServers(cursor)
+    local url = Api..PlaceId.."/servers/Public?sortOrder=Asc&limit=100" .. ((cursor and "&cursor="..cursor) or "")
+    local raw = game:HttpGet(url)
+    return Http:JSONDecode(raw)
 end
 
--- Search + Serverhop
-local function StartSearch()
-    stopSearch = false
+local function Copy(text)
+    setclipboard(tostring(text))
+end
+
+-- Button Function
+Button.MouseButton1Click:Connect(function()
+    local targetName = TextBox.Text
+    if targetName == "" then
+        Status.Text = "Status: Enter username first!"
+        return
+    end
+    
     Status.Text = "Status: Searching..."
-    local targetUser = UserBox.Text
-    local chosenPlace = tonumber(PlaceBox.Text) or placeId
-    local cursor
-    local checked = 0
-
-    while not stopSearch and checked < maxServers do
-        local servers = ListServers(chosenPlace, cursor)
+    local cursor = nil
+    local found = false
+    
+    for i = 1, 5 do -- 5 pages * 100 servers = 500 max servers
+        local servers = ListServers(cursor)
         for _, server in ipairs(servers.data) do
-            if stopSearch then break end
-            checked += 1
-            Status.Text = ("Checking server %d/%d..."):format(checked, maxServers)
-
-            -- Check players
             if server.playing > 0 then
-                for _, player in ipairs(server.playerIds or {}) do
-                    local success, name = pcall(function()
-                        return Players:GetNameFromUserIdAsync(player)
-                    end)
-                    if success and string.lower(name) == string.lower(targetUser) then
-                        Status.Text = "✅ Found! Teleporting..."
-                        TPS:TeleportToPlaceInstance(chosenPlace, server.id, LocalPlayer)
-                        return
+                local success, players = pcall(function()
+                    return game:GetService("Players"):GetPlayers()
+                end)
+                -- Instead of Local GetPlayers, check API
+                local srvPlayers = server.playerIds or {}
+                for _, userid in ipairs(srvPlayers) do
+                    local name = game.Players:GetNameFromUserIdAsync(userid)
+                    if string.lower(name) == string.lower(targetName) then
+                        Status.Text = "✅ Target found! Joining..."
+                        Copy(server.id) -- copy JobId
+                        TeleportService:TeleportToPlaceInstance(PlaceId, server.id, LocalPlayer)
+                        found = true
+                        break
                     end
                 end
             end
-
-            -- If not found, hop
-            Status.Text = "ServerHop..."
-            TPS:TeleportToPlaceInstance(chosenPlace, server.id, LocalPlayer)
-            task.wait(2) -- prevent spam
+            if found then break end
         end
+        if found then break end
         cursor = servers.nextPageCursor
         if not cursor then break end
     end
-
-    if not stopSearch then
-        Status.Text = "❌ Not found. Try again."
+    
+    if not found then
+        Status.Text = "❌ Target not found. Try again."
     end
-end
-
-StartBtn.MouseButton1Click:Connect(function()
-    if UserBox.Text == "" then
-        Status.Text = "⚠️ Enter a username first"
-        return
-    end
-    task.spawn(StartSearch)
-end)
-
-StopBtn.MouseButton1Click:Connect(function()
-    stopSearch = true
-    Status.Text = "⏹️ Stopped"
 end)
