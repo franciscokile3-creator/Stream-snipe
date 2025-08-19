@@ -1,0 +1,163 @@
+-- // Stream Sniper with Orange UI + Draggable
+-- // By ChatGPT
+
+-- Services
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+-- UI Setup
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.ResetOnSpawn = false
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 300, 0, 220)
+MainFrame.Position = UDim2.new(0.35, 0, 0.35, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(255, 140, 0) -- orange
+MainFrame.Active = true
+MainFrame.Draggable = true
+
+local UICorner = Instance.new("UICorner", MainFrame)
+UICorner.CornerRadius = UDim.new(0, 12)
+
+-- Title
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundTransparency = 1
+Title.Text = "🔫 Stream Sniper"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 20
+
+-- Username Input
+local UserBox = Instance.new("TextBox", MainFrame)
+UserBox.PlaceholderText = "Enter Username..."
+UserBox.Size = UDim2.new(1, -20, 0, 30)
+UserBox.Position = UDim2.new(0, 10, 0, 40)
+UserBox.BackgroundColor3 = Color3.fromRGB(255, 180, 80)
+UserBox.TextColor3 = Color3.fromRGB(0, 0, 0)
+UserBox.Font = Enum.Font.SourceSans
+UserBox.TextSize = 18
+Instance.new("UICorner", UserBox).CornerRadius = UDim.new(0, 8)
+
+-- PlaceId Input
+local PlaceBox = Instance.new("TextBox", MainFrame)
+PlaceBox.PlaceholderText = "Enter PlaceId..."
+PlaceBox.Size = UDim2.new(1, -20, 0, 30)
+PlaceBox.Position = UDim2.new(0, 10, 0, 80)
+PlaceBox.BackgroundColor3 = Color3.fromRGB(255, 180, 80)
+PlaceBox.TextColor3 = Color3.fromRGB(0, 0, 0)
+PlaceBox.Font = Enum.Font.SourceSans
+PlaceBox.TextSize = 18
+Instance.new("UICorner", PlaceBox).CornerRadius = UDim.new(0, 8)
+
+-- Start Button
+local StartButton = Instance.new("TextButton", MainFrame)
+StartButton.Size = UDim2.new(1, -20, 0, 35)
+StartButton.Position = UDim2.new(0, 10, 0, 125)
+StartButton.BackgroundColor3 = Color3.fromRGB(200, 90, 0)
+StartButton.Text = "Start Sniping"
+StartButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+StartButton.Font = Enum.Font.SourceSansBold
+StartButton.TextSize = 20
+Instance.new("UICorner", StartButton).CornerRadius = UDim.new(0, 8)
+
+-- Stop Button
+local StopButton = Instance.new("TextButton", MainFrame)
+StopButton.Size = UDim2.new(1, -20, 0, 35)
+StopButton.Position = UDim2.new(0, 10, 0, 170)
+StopButton.BackgroundColor3 = Color3.fromRGB(150, 50, 0)
+StopButton.Text = "Stop Search"
+StopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+StopButton.Font = Enum.Font.SourceSansBold
+StopButton.TextSize = 20
+Instance.new("UICorner", StopButton).CornerRadius = UDim.new(0, 8)
+
+-- Notify function
+local function Notify(msg)
+   Title.Text = "🔫 " .. msg
+   task.delay(3, function()
+      Title.Text = "🔫 Stream Sniper"
+   end)
+end
+
+-- Variables
+local searching = false
+
+-- Functions
+local function getUserIdFromUsername(name)
+   local url = "https://users.roblox.com/v1/usernames/users"
+   local body = HttpService:JSONEncode({ usernames = { name } })
+   local response = game:HttpPost(url, body, Enum.HttpContentType.ApplicationJson)
+   local data = HttpService:JSONDecode(response)
+   return data.data[1] and data.data[1].id or nil
+end
+
+-- Start Button Action
+StartButton.MouseButton1Click:Connect(function()
+   if searching then
+      Notify("Already searching...")
+      return
+   end
+
+   local targetName = UserBox.Text
+   local placeId = tonumber(PlaceBox.Text)
+
+   if targetName == "" or not placeId then
+      Notify("Enter Username + PlaceId")
+      return
+   end
+
+   Notify("Fetching UserId...")
+   local userId = getUserIdFromUsername(targetName)
+   if not userId then
+      Notify("Invalid username!")
+      return
+   end
+
+   searching = true
+   task.spawn(function()
+      local cursor = ""
+      local success = false
+
+      for i = 1, 100 do
+         if not searching then break end -- if stopped
+         local url = "https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder=Asc&limit=100"..(cursor ~= "" and "&cursor="..cursor or "")
+         local response = game:HttpGet(url)
+         local data = HttpService:JSONDecode(response)
+
+         for _,server in pairs(data.data) do
+            for _,pid in pairs(server.playerIds) do
+               if pid == userId then
+                  Notify("Target found! Joining...")
+                  TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
+                  success = true
+                  searching = false
+                  break
+               end
+            end
+            if success or not searching then break end
+         end
+
+         if success or not searching then break end
+         cursor = data.nextPageCursor or ""
+         if cursor == "" then break end
+      end
+
+      if not success and searching then
+         Notify("Target not found in 100 servers!")
+         searching = false
+      end
+   end)
+end)
+
+-- Stop Button Action
+StopButton.MouseButton1Click:Connect(function()
+   if searching then
+      searching = false
+      Notify("Stopped search.")
+   else
+      Notify("Not searching.")
+   end
+end)
